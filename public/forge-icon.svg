@@ -1,0 +1,16 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#bg)"/>
+  <path d="M74 181V75H128C156 75 180 97 180 124C180 151 156 173 128 173H102V181H74Z" fill="url(#plate)"/>
+  <path d="M102 105V143H126C136 143 144 135 144 124C144 113 136 105 126 105H102Z" fill="#08111D"/>
+  <path d="M180 80L195 95L165 125L150 110L180 80Z" fill="#80FFC1"/>
+  <defs>
+    <linearGradient id="bg" x1="30" y1="26" x2="220" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#091712"/>
+      <stop offset="1" stop-color="#17364B"/>
+    </linearGradient>
+    <linearGradient id="plate" x1="74" y1="75" x2="190" y2="181" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DF2BE"/>
+      <stop offset="1" stop-color="#63DFFF"/>
+    </linearGradient>
+  </defs>
+</svg>

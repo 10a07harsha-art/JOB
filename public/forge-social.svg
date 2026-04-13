@@ -1,0 +1,27 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#091612"/>
+  <circle cx="108" cy="548" r="184" fill="#16343D"/>
+  <circle cx="1012" cy="112" r="160" fill="#153042"/>
+  <rect x="72" y="72" width="1056" height="486" rx="36" fill="url(#panel)" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="116" y="140" width="96" height="96" rx="28" fill="url(#iconbg)"/>
+  <path d="M140 216V160H166C185 160 201 175 201 193C201 211 185 226 166 226H155V216H140Z" fill="url(#plate)"/>
+  <path d="M155 180V206H166C173 206 179 200 179 193C179 186 173 180 166 180H155Z" fill="#08111D"/>
+  <path d="M195 162L204 171L186 189L177 180L195 162Z" fill="#81FFC0"/>
+  <text x="248" y="198" fill="white" font-family="Georgia, serif" font-size="66" font-weight="700">ForgeHire</text>
+  <text x="118" y="310" fill="#EAF5FF" font-family="Arial, sans-serif" font-size="36" font-weight="700">Dedicated hiring workspace for recruiters, founders, and company teams.</text>
+  <text x="118" y="390" fill="#9CB2CF" font-family="Arial, sans-serif" font-size="28">Publish internal roles, review applicants, verify resumes, and benchmark against the market.</text>
+  <defs>
+    <linearGradient id="panel" x1="72" y1="72" x2="1024" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A1A20"/>
+      <stop offset="1" stop-color="#132946"/>
+    </linearGradient>
+    <linearGradient id="iconbg" x1="116" y1="140" x2="212" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#091712"/>
+      <stop offset="1" stop-color="#17364B"/>
+    </linearGradient>
+    <linearGradient id="plate" x1="140" y1="160" x2="201" y2="226" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DF2BE"/>
+      <stop offset="1" stop-color="#63DFFF"/>
+    </linearGradient>
+  </defs>
+</svg>

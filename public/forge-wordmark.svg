@@ -1,0 +1,18 @@
+<svg width="430" height="88" viewBox="0 0 430 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="4" y="8" width="72" height="72" rx="24" fill="url(#bg)"/>
+  <path d="M24 63V25H43C57 25 69 36 69 49C69 62 57 73 43 73H35V63H24Z" fill="url(#plate)"/>
+  <path d="M35 40V58H43C48 58 52 54 52 49C52 44 48 40 43 40H35Z" fill="#08111D"/>
+  <path d="M61 26L68 33L54 47L47 40L61 26Z" fill="#81FFC0"/>
+  <text x="96" y="42" fill="white" font-family="Georgia, serif" font-size="28" font-weight="700">ForgeHire</text>
+  <text x="96" y="64" fill="#9CB2CF" font-family="Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="0.18em">HIRING CONSOLE</text>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="10" x2="72" y2="76" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#091712"/>
+      <stop offset="1" stop-color="#17364B"/>
+    </linearGradient>
+    <linearGradient id="plate" x1="24" y1="25" x2="66" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DF2BE"/>
+      <stop offset="1" stop-color="#63DFFF"/>
+    </linearGradient>
+  </defs>
+</svg>

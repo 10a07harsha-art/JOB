@@ -1,0 +1,31 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#08111D"/>
+  <circle cx="162" cy="124" r="160" fill="#10233B"/>
+  <circle cx="1060" cy="522" r="200" fill="#132B47"/>
+  <rect x="72" y="72" width="1056" height="486" rx="36" fill="url(#panel)" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="116" y="140" width="96" height="96" rx="28" fill="url(#iconbg)"/>
+  <circle cx="164" cy="188" r="28" stroke="url(#ring)" stroke-width="5"/>
+  <circle cx="186" cy="176" r="5" fill="#81FFC0"/>
+  <path d="M163 168L170 182L184 188L170 194L163 208L156 194L142 188L156 182L163 168Z" fill="url(#spark)"/>
+  <text x="248" y="198" fill="white" font-family="Georgia, serif" font-size="66" font-weight="700">Orbit Jobs</text>
+  <text x="118" y="310" fill="#EAF5FF" font-family="Arial, sans-serif" font-size="36" font-weight="700">Live global jobs, AI guidance, trends, and candidate workflow in one place.</text>
+  <text x="118" y="390" fill="#9CB2CF" font-family="Arial, sans-serif" font-size="28">Explore roles, open real apply links, save opportunities, and sharpen your profile.</text>
+  <defs>
+    <linearGradient id="panel" x1="72" y1="72" x2="1002" y2="576" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1830"/>
+      <stop offset="1" stop-color="#132946"/>
+    </linearGradient>
+    <linearGradient id="iconbg" x1="116" y1="140" x2="212" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#081120"/>
+      <stop offset="1" stop-color="#173D5C"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="136" y1="164" x2="192" y2="208" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#66E4FF"/>
+      <stop offset="1" stop-color="#81FFC0"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="156" y1="168" x2="171" y2="199" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE28B"/>
+      <stop offset="1" stop-color="#FF9E5A"/>
+    </linearGradient>
+  </defs>
+</svg>

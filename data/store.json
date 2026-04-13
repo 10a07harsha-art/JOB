@@ -1,0 +1,240 @@
+{
+  "meta": {
+    "developerProvisionKey": "DEV-CAREERLINK-2026",
+    "tokenSecret": "careerlink-local-token-secret"
+  },
+  "users": [
+    {
+      "id": "u_member_0e63728a",
+      "role": "career_member",
+      "name": "Harsha",
+      "headline": "student",
+      "email": "10a07harsha@gmail.com",
+      "avatar": "H",
+      "address": "",
+      "country": "",
+      "city": "",
+      "age": 20,
+      "phone": "8660908010",
+      "budget": "$1500 / month",
+      "skills": [],
+      "resume": "",
+      "about": "Building a thoughtful career path with Orbit Jobs.",
+      "appliedJobs": [],
+      "savedJobs": [],
+      "postedJobs": [],
+      "verifiedResumes": [],
+      "passwordSalt": "d0ccbd1da7c85390ecc791d436d0e02f",
+      "passwordHash": "c25495889c7f2067c6acccb7ff48480674066c0e78144aede434975c0e1deaedd5a2ec071edc80634e6b681fea3f82fe633d47c670482e731addb14508b37023"
+    },
+    {
+      "id": "u_admin_bootstrap",
+      "role": "talent_lead",
+      "name": "ForgeHire Admin",
+      "headline": "Hiring Operations Lead",
+      "companyName": "ForgeHire",
+      "companyWebsite": "",
+      "companyIndustry": "Recruiting Technology",
+      "companyLogoText": "FH",
+      "teamSize": "10-50 employees",
+      "email": "admin@forgehire.app",
+      "passwordSalt": "2d24b71339a843bfbc0f63409d415ebe",
+      "passwordHash": "5e5b028cf27c18b6f4fdff1451d927bdeb2f4498f26bfea0ce3749c282de20ce68624977dc9c6f16fcbde6549468a6da3c4e21095e3bdbcc78a882979834cb61",
+      "avatar": "FA",
+      "address": "",
+      "country": "India",
+      "city": "Bengaluru",
+      "age": 30,
+      "phone": "",
+      "budget": "$25k quarterly hiring budget",
+      "skills": [
+        "Hiring",
+        "Screening",
+        "Operations"
+      ],
+      "resume": "Hiring operations admin profile.",
+      "resumeFileName": "admin-profile.txt",
+      "about": "Manages the ForgeHire employer workspace.",
+      "appliedJobs": [],
+      "savedJobs": [],
+      "postedJobs": [],
+      "verifiedResumes": []
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job_world_1",
+      "source": "global",
+      "title": "AI Product Analyst",
+      "company": "Atlas Intelligence",
+      "location": "Remote - Global",
+      "country": "United States",
+      "type": "Full-time",
+      "salary": "$95k - $130k",
+      "skills": [
+        "Analytics",
+        "Prompt Design",
+        "SQL"
+      ],
+      "description": "Help teams interpret model performance, user behavior, and adoption trends across AI products.",
+      "postedBy": null,
+      "createdAt": "2026-04-03T08:30:00.000Z",
+      "applicants": []
+    },
+    {
+      "id": "job_world_2",
+      "source": "global",
+      "title": "Remote React Developer",
+      "company": "Harbor Cloud",
+      "location": "Remote - Europe",
+      "country": "Germany",
+      "type": "Contract",
+      "salary": "$70 / hr",
+      "skills": [
+        "React",
+        "Node.js",
+        "Testing"
+      ],
+      "description": "Build customer dashboards, improve UI performance, and partner with product teams on shipping faster.",
+      "postedBy": null,
+      "createdAt": "2026-04-03T12:45:00.000Z",
+      "applicants": []
+    },
+    {
+      "id": "job_world_3",
+      "source": "global",
+      "title": "UI Platform Engineer",
+      "company": "Nova Retail",
+      "location": "Bengaluru, India",
+      "country": "India",
+      "type": "Full-time",
+      "salary": "$40k - $60k",
+      "skills": [
+        "TypeScript",
+        "Design Systems",
+        "Performance"
+      ],
+      "description": "Own our shared UI platform and support multiple product squads with reusable frontend foundations.",
+      "postedBy": null,
+      "createdAt": "2026-04-04T05:15:00.000Z",
+      "applicants": []
+    },
+    {
+      "id": "job_world_4",
+      "source": "global",
+      "title": "Junior Data Analyst",
+      "company": "Pulse Finance",
+      "location": "Dubai, UAE",
+      "country": "United Arab Emirates",
+      "type": "Full-time",
+      "salary": "$38k - $52k",
+      "skills": [
+        "Excel",
+        "SQL",
+        "Dashboards"
+      ],
+      "description": "Turn business data into clean dashboards and help leadership understand changing market patterns.",
+      "postedBy": null,
+      "createdAt": "2026-04-02T16:20:00.000Z",
+      "applicants": []
+    }
+  ],
+  "trends": [
+    {
+      "id": "trend_1",
+      "title": "AI Product and Prompt Roles",
+      "direction": "up",
+      "change": "+28% demand",
+      "summary": "Companies are hiring hybrid analysts and product operators who can work with AI systems, data, and domain experts.",
+      "regions": [
+        "United States",
+        "India",
+        "Singapore"
+      ]
+    },
+    {
+      "id": "trend_2",
+      "title": "Remote Frontend Engineering",
+      "direction": "up",
+      "change": "+19% demand",
+      "summary": "Frontend roles with design system and performance skills continue to rise, especially for distributed startups and SaaS teams.",
+      "regions": [
+        "Germany",
+        "India",
+        "United Kingdom"
+      ]
+    },
+    {
+      "id": "trend_3",
+      "title": "Traditional Manual QA",
+      "direction": "down",
+      "change": "-11% demand",
+      "summary": "Manual-only roles are slowing while automation, platform QA, and release engineering continue to gain ground.",
+      "regions": [
+        "Global"
+      ]
+    },
+    {
+      "id": "trend_4",
+      "title": "Cloud Cost Optimization",
+      "direction": "up",
+      "change": "+14% demand",
+      "summary": "More companies are hiring engineers and analysts who can control cloud spend while maintaining performance.",
+      "regions": [
+        "United States",
+        "UAE",
+        "Singapore"
+      ]
+    }
+  ],
+  "degrees": [
+    {
+      "id": "deg_1",
+      "name": "MS in Human Computer Interaction",
+      "duration": "2 years",
+      "budgetRange": "$18k - $28k",
+      "fitFor": [
+        "Design Systems",
+        "UX Research",
+        "Frontend"
+      ],
+      "countries": [
+        "Germany",
+        "Netherlands",
+        "Canada"
+      ]
+    },
+    {
+      "id": "deg_2",
+      "name": "Masters in Data Analytics",
+      "duration": "1.5 years",
+      "budgetRange": "$16k - $24k",
+      "fitFor": [
+        "SQL",
+        "Analytics",
+        "AI Product"
+      ],
+      "countries": [
+        "Ireland",
+        "Australia",
+        "Singapore"
+      ]
+    },
+    {
+      "id": "deg_3",
+      "name": "MS in Software Engineering",
+      "duration": "2 years",
+      "budgetRange": "$20k - $35k",
+      "fitFor": [
+        "React",
+        "Node.js",
+        "Platform Engineering"
+      ],
+      "countries": [
+        "Canada",
+        "Sweden",
+        "United States"
+      ]
+    }
+  ]
+}
