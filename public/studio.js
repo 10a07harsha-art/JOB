@@ -1,28 +1,48 @@
 const app = document.getElementById("app");
 const TOKEN_KEY = "forgehire_token";
+const SESSION_KEY = "forgehire_session";
 const LEGACY_TOKEN_KEY = "careerlink_token";
 
+function readStoredSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch (error) {
+    localStorage.removeItem(SESSION_KEY);
+    return null;
+  }
+}
+
 const state = {
-  session: null,
-  token: localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || "",
+  session: readStoredSession(),
+  token: localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || readStoredSession()?.auth?.token || "",
   message: "",
   messageType: "success",
   passwordOpen: false,
+  notificationsOpen: false,
   activeJobId: "",
   focusedJobId: "",
+  jobQuery: "",
+  jobSourceFilter: "all",
+  jobTypeFilter: "all",
+  jobSort: "recent",
 };
 
-document.title = "ForgeHire Console";
+document.title = "ForgeHire Employer Console";
 let refreshSessionRun = 0;
 
 async function request(path, options = {}) {
+  const { headers: requestHeaders, ...requestOptions } = options;
   const response = await fetch(path, {
+    ...requestOptions,
     headers: {
       "Content-Type": "application/json",
       ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-      ...(options.headers || {}),
+      ...(requestHeaders || {}),
     },
-    ...options,
   });
 
   const data = await response.json();
@@ -48,6 +68,7 @@ function saveSession(session) {
   state.session = session;
   state.token = session.auth.token;
   localStorage.setItem(TOKEN_KEY, state.token);
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   localStorage.removeItem(LEGACY_TOKEN_KEY);
 }
 
@@ -55,9 +76,11 @@ function clearSession() {
   state.session = null;
   state.token = "";
   state.passwordOpen = false;
+  state.notificationsOpen = false;
   state.activeJobId = "";
   state.focusedJobId = "";
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
 }
 
@@ -76,10 +99,11 @@ async function refreshSession() {
       return;
     }
     if (session.kind !== "talent_lead") {
-      window.location.replace("/");
+      window.location.replace("/candidate");
       return;
     }
     state.session = session;
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   } catch (error) {
     if (runId !== refreshSessionRun || tokenAtStart !== state.token) {
       return;
@@ -93,6 +117,118 @@ async function refreshSession() {
 
 function featureChip(label, enabled) {
   return `<span class="feature-chip ${enabled ? "live" : "fallback"}">${label}: ${enabled ? "live" : "fallback"}</span>`;
+}
+
+function normalizeJobType(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-");
+}
+
+function formatJobType(value) {
+  const normalized = normalizeJobType(value);
+  if (normalized === "full-time" || normalized === "fulltime") {
+    return "Full-Time";
+  }
+  if (normalized === "part-time" || normalized === "parttime") {
+    return "Part-Time";
+  }
+  return normalized
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("-");
+}
+
+function getJobRouteId() {
+  const match = window.location.pathname.match(/^\/(?:professional|studio)\/job\/([^/]+)\/?$/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function openJobRoute(jobId) {
+  const base = window.location.pathname.startsWith("/studio") ? "/studio" : "/professional";
+  window.history.pushState({}, "", `${base}/job/${encodeURIComponent(jobId)}`);
+}
+
+function closeJobRoute() {
+  if (window.location.pathname.startsWith("/professional/job/") || window.location.pathname.startsWith("/studio/job/")) {
+    const base = window.location.pathname.startsWith("/studio/job/") ? "/studio" : "/professional";
+    window.history.pushState({}, "", base);
+  }
+}
+
+function salaryValue(text) {
+  const value = String(text || "").toLowerCase();
+  const match = value.match(/(\d+(?:\.\d+)?)(k?)/);
+  if (!match) {
+    return 0;
+  }
+  const number = Number(match[1]);
+  return match[2] === "k" ? number * 1000 : number;
+}
+
+function filterJobs(jobs) {
+  const query = state.jobQuery.trim().toLowerCase();
+  const sourceFilter = state.jobSourceFilter;
+  const typeFilter = state.jobTypeFilter;
+
+  const filtered = jobs.filter((job) => {
+    if (sourceFilter !== "all" && job.source !== sourceFilter) {
+      return false;
+    }
+
+    if (typeFilter !== "all" && normalizeJobType(job.type) !== typeFilter) {
+      return false;
+    }
+
+    if (!query) {
+      return true;
+    }
+
+    const haystack = [
+      job.title,
+      job.company,
+      job.location,
+      job.country,
+      job.type,
+      job.salary,
+      job.description,
+      ...(job.skills || []),
+    ].join(" ").toLowerCase();
+
+    return haystack.includes(query);
+  });
+
+  const sorted = [...filtered];
+  switch (state.jobSort) {
+    case "recent":
+    case "newest":
+      sorted.sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
+      break;
+    case "title":
+      sorted.sort((left, right) => left.title.localeCompare(right.title));
+      break;
+    case "salary-high":
+      sorted.sort((left, right) => salaryValue(right.salary) - salaryValue(left.salary));
+      break;
+    case "salary-low":
+      sorted.sort((left, right) => salaryValue(left.salary) - salaryValue(right.salary));
+      break;
+    default:
+      break;
+  }
+
+  return sorted;
+}
+
+function formatNotificationTime(value) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function normalizeJobText(value) {
@@ -154,10 +290,10 @@ function authView() {
     <div class="auth-shell studio-shell">
       <section class="hero-card glass reveal-up studio-hero forge-hero-card">
         <span class="eyebrow">ForgeHire</span>
-        <h1>Separate company access for hiring teams.</h1>
+        <h1>Employer workspace for hiring teams and recruiters.</h1>
         <p>
           This workspace is built for recruiters, founders, and hiring managers. Publish roles, review applicants,
-          verify resumes, and track market demand without mixing employer tools into the candidate site.
+          verify resumes, and track market demand in a dedicated company site that stays separate from the candidate portal.
         </p>
         <div class="hero-grid hero-feature-grid">
           <div class="hero-feature-card"><strong>Company login</strong><span>secure employer-only workspace</span></div>
@@ -169,7 +305,7 @@ function authView() {
           <div><b>Market context</b><span>compare company hiring with global demand</span></div>
         </div>
         <div class="hero-actions">
-          <a class="ghost-link-button" href="/">Back to Orbit Jobs</a>
+          <a class="ghost-link-button" href="/candidate">Back to Orbit Jobs</a>
         </div>
       </section>
 
@@ -191,6 +327,7 @@ function authView() {
 
 function topbar() {
   const { viewer } = state.session;
+  const notificationCount = (state.session.notifications || []).length;
   return `
     <header class="topbar glass reveal-down">
       <div class="brand-lockup">
@@ -204,6 +341,7 @@ function topbar() {
         ${featureChip("Jobs", state.session.features.liveJobs)}
         ${featureChip("Trends", state.session.features.liveTrends)}
         ${featureChip("AI", state.session.features.liveAi)}
+        <button class="ghost-button" id="open-notifications">Notifications ${notificationCount ? `(${notificationCount})` : ""}</button>
         <a class="ghost-link-button" href="/">Orbit Jobs</a>
         <button class="ghost-button" id="open-password">Password</button>
         <button class="ghost-button" id="refresh-session">Refresh</button>
@@ -239,7 +377,7 @@ function jobCards(jobs) {
       </div>
       <div class="meta-row compact-wrap">
         <span>${job.location}</span>
-        <span>${job.type}</span>
+        <span>${formatJobType(job.type)}</span>
         <span>${job.country}</span>
       </div>
       <p class="job-description">${previewText(job.description)}</p>
@@ -276,7 +414,7 @@ function jobExplorer(jobs, options = {}) {
             <p>${job.company}</p>
             <div class="meta-row compact-wrap">
               <span>${job.location}</span>
-              <span>${job.type}</span>
+              <span>${formatJobType(job.type)}</span>
             </div>
           </article>
         `).join("")}
@@ -351,7 +489,7 @@ function jobDetailModal() {
         </div>
         <div class="job-modal-meta">
           <span>${job.location}</span>
-          <span>${job.type}</span>
+          <span>${formatJobType(job.type)}</span>
           <span>${job.country}</span>
           <span>${job.salary}</span>
         </div>
@@ -376,8 +514,154 @@ function jobDetailModal() {
   `;
 }
 
+function jobDetailPage(job) {
+  if (!job) {
+    return `
+      <div class="dashboard-shell">
+        <section class="panel glass">
+          <span class="eyebrow">Job detail</span>
+          <h3>Job not found</h3>
+          <p>This listing is no longer available or the link is invalid.</p>
+          <button class="primary-button" id="close-job-detail">Back to jobs</button>
+        </section>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="dashboard-shell job-detail-shell">
+      <section class="hero-panel glass reveal-up forge-hero-panel">
+        <div class="job-preview-brand">
+          ${companyMark(job.company, job.source === "internal" ? "FH" : "GL")}
+          <div>
+            <span class="source-badge ${job.source}">${job.source === "internal" ? "Internal role" : "Global listing"}</span>
+            <h1>${job.title}</h1>
+            <p>${job.company}</p>
+          </div>
+        </div>
+        <div class="job-modal-meta">
+          <span>${job.location}</span>
+          <span>${formatJobType(job.type)}</span>
+          <span>${job.country}</span>
+          <span>${job.salary}</span>
+        </div>
+        <div class="skill-row">
+          ${job.skills.map((skill) => `<span>${skill}</span>`).join("")}
+        </div>
+        <div class="hero-actions">
+          ${job.source === "global" && job.applyUrl ? `<a class="primary-link-button" href="${job.applyUrl}" target="_blank" rel="noreferrer">Open listing</a>` : ""}
+          <button class="ghost-button" id="close-job-detail">Back to jobs</button>
+        </div>
+      </section>
+
+      <section class="panel glass reveal-up delay-1">
+        <div class="panel-header">
+          <div>
+            <span class="eyebrow">Role Summary</span>
+            <h3>What this job is about</h3>
+          </div>
+        </div>
+        <p class="job-detail-copy">${normalizeJobText(job.description)}</p>
+      </section>
+
+      <section class="panel glass reveal-up delay-2">
+        <div class="panel-header">
+          <div>
+            <span class="eyebrow">Market View</span>
+            <h3>How it compares to your openings</h3>
+          </div>
+        </div>
+        <div class="info-grid">
+          <div><strong>${job.source === "global" ? "External benchmark" : "Company-owned role"}</strong><span>Source</span></div>
+          <div><strong>${job.applicantCount || 0}</strong><span>Applicants</span></div>
+          <div><strong>${job.source === "global" && job.applyUrl ? "Live apply link" : "Internal posting"}</strong><span>Action</span></div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function notificationsDrawer() {
+  if (!state.session || !state.notificationsOpen) {
+    return "";
+  }
+
+  const notifications = state.session.notifications || [];
+  return `
+    <div class="profile-overlay" id="close-notifications-overlay">
+      <aside class="profile-drawer glass reveal-up notifications-drawer" role="dialog" aria-modal="true" aria-label="Notifications panel">
+        <div class="panel-header">
+          <div>
+            <span class="eyebrow">Notifications</span>
+            <h3>Recent updates</h3>
+          </div>
+          <button class="ghost-button" type="button" id="close-notifications">Close</button>
+        </div>
+        <div class="mini-card-grid notification-grid">
+          ${notifications.length ? notifications.map((item) => `
+            <article class="mini-card notification-card">
+              <strong>${item.title}</strong>
+              <span>${item.type}</span>
+              <p>${item.message}</p>
+              <small>${formatNotificationTime(item.createdAt)}</small>
+            </article>
+          `).join("") : `<div class="empty-card">You’re all caught up. New applications and resume checks will appear here.</div>`}
+        </div>
+      </aside>
+    </div>
+  `;
+}
+
+function jobFilterBar() {
+  const jobs = state.session ? [...(state.session.worldJobs || []), ...(state.session.postedJobs || [])] : [];
+  const types = [...new Map(jobs.map((job) => [normalizeJobType(job.type), formatJobType(job.type)])).entries()];
+  return `
+    <section class="panel glass reveal-up delay-1 job-filter-bar">
+      <div class="panel-header">
+        <div>
+          <span class="eyebrow">Find roles</span>
+          <h3>Search, filter, and sort jobs</h3>
+        </div>
+      </div>
+      <div class="search-grid">
+        <label class="field"><span>Search</span><input id="job-search" value="${state.jobQuery}" placeholder="Title, company, skill, location" /></label>
+        <label class="field"><span>Source</span>
+          <select id="job-source-filter">
+            <option value="all" ${state.jobSourceFilter === "all" ? "selected" : ""}>All sources</option>
+            <option value="global" ${state.jobSourceFilter === "global" ? "selected" : ""}>Global jobs</option>
+            <option value="internal" ${state.jobSourceFilter === "internal" ? "selected" : ""}>Internal roles</option>
+          </select>
+        </label>
+        <label class="field"><span>Type</span>
+          <select id="job-type-filter">
+            <option value="all" ${state.jobTypeFilter === "all" ? "selected" : ""}>All types</option>
+            ${types.map(([value, label]) => `<option value="${value}" ${state.jobTypeFilter === value ? "selected" : ""}>${label}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field"><span>Sort</span>
+          <select id="job-sort">
+            <option value="recent" ${state.jobSort === "recent" ? "selected" : ""}>Most recent</option>
+            <option value="salary-high" ${state.jobSort === "salary-high" ? "selected" : ""}>Salary high to low</option>
+            <option value="salary-low" ${state.jobSort === "salary-low" ? "selected" : ""}>Salary low to high</option>
+            <option value="title" ${state.jobSort === "title" ? "selected" : ""}>Title A to Z</option>
+          </select>
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+function getEmployerJobById(jobId) {
+  if (!state.session || !jobId) {
+    return null;
+  }
+  return [...(state.session.worldJobs || []), ...(state.session.postedJobs || [])].find((entry) => entry.id === jobId) || null;
+}
+
 function adminDashboard() {
   const { viewer, postedJobs, applicants, trends, worldJobs, resumeChecks } = state.session;
+  const visibleWorldJobs = filterJobs(worldJobs);
+  const visiblePostedJobs = filterJobs(postedJobs);
   return `
     <div class="dashboard-shell">
       <section class="hero-panel glass reveal-up admin-tone forge-hero-panel">
@@ -394,6 +678,8 @@ function adminDashboard() {
           <div class="stat-card"><strong>${resumeChecks.length}</strong><span>Resume checks</span></div>
         </div>
       </section>
+
+      ${jobFilterBar()}
 
       <section class="panel glass reveal-up delay-1">
         <div class="panel-header">
@@ -457,7 +743,10 @@ function adminDashboard() {
                   <strong>${applicant.user.name}</strong>
                   <span>${applicant.jobTitle}</span>
                 </div>
-                <b>${applicant.resumeScore}%</b>
+                <div class="card-stack compact">
+                  <b>${applicant.resumeScore}%</b>
+                  <span class="score-pill">${applicant.status}</span>
+                </div>
               </div>
               <p>${applicant.notes}</p>
               <small>${applicant.user.headline || "Candidate"}</small>
@@ -466,7 +755,14 @@ function adminDashboard() {
                 <span>${applicant.user.country || "Unknown"}</span>
                 <span>${applicant.user.resumeFileName || "manual-entry.txt"}</span>
               </div>
-              <button class="ghost-button" data-verify-candidate="${applicant.user.id}">Verify resume</button>
+              <div class="action-grid">
+                <button class="ghost-button" data-verify-candidate="${applicant.user.id}">Verify resume</button>
+                <button class="ghost-button" data-update-stage="reviewed" data-job-id="${applicant.jobId}" data-candidate-id="${applicant.user.id}">Reviewed</button>
+                <button class="ghost-button" data-update-stage="shortlisted" data-job-id="${applicant.jobId}" data-candidate-id="${applicant.user.id}">Shortlist</button>
+                <button class="ghost-button" data-update-stage="interview" data-job-id="${applicant.jobId}" data-candidate-id="${applicant.user.id}">Interview</button>
+                <button class="ghost-button" data-update-stage="offer" data-job-id="${applicant.jobId}" data-candidate-id="${applicant.user.id}">Offer</button>
+                <button class="ghost-button" data-update-stage="rejected" data-job-id="${applicant.jobId}" data-candidate-id="${applicant.user.id}">Reject</button>
+              </div>
             </article>
           `).join("") : `<div class="empty-card">No applicants yet. Publish your first role to start receiving applications.</div>`}
         </div>
@@ -505,9 +801,10 @@ function adminDashboard() {
           <div>
             <span class="eyebrow">Market roles</span>
             <h3>See world jobs beside your own openings</h3>
+            <p>${visibleWorldJobs.length} market listings after filters.</p>
           </div>
         </div>
-        ${jobExplorer(worldJobs, { emptyText: "No global benchmark roles available right now." })}
+        ${jobExplorer(visibleWorldJobs, { emptyText: "No global benchmark roles available right now." })}
       </section>
 
       <section class="panel glass reveal-up delay-6">
@@ -515,9 +812,10 @@ function adminDashboard() {
           <div>
             <span class="eyebrow">Internal roles</span>
             <h3>Your published jobs</h3>
+            <p>${visiblePostedJobs.length} internal roles after filters.</p>
           </div>
         </div>
-        ${jobExplorer(postedJobs, { emptyText: "No internal roles yet. Use the form above to publish your first position." })}
+        ${jobExplorer(visiblePostedJobs, { emptyText: "No internal roles yet. Use the form above to publish your first position." })}
       </section>
     </div>
   `;
@@ -552,12 +850,15 @@ function passwordDrawer() {
 }
 
 function shell() {
+  const routeJobId = getJobRouteId();
+  const routeJob = routeJobId ? getEmployerJobById(routeJobId) : null;
   return `
     <div class="page-frame">
       ${topbar()}
       ${state.message ? `<div class="notice ${state.messageType}">${state.message}</div>` : ""}
-      ${adminDashboard()}
+      ${routeJobId ? jobDetailPage(routeJob) : adminDashboard()}
       ${jobDetailModal()}
+      ${notificationsDrawer()}
       ${passwordDrawer()}
     </div>
   `;
@@ -567,6 +868,9 @@ function render() {
   if (state.session?.kind === "member") {
     window.location.replace("/");
     return;
+  }
+  if (state.session?.kind === "talent_lead" && window.location.pathname === "/") {
+    window.history.replaceState({}, "", "/professional");
   }
   app.innerHTML = state.session ? shell() : authView();
   bindEvents();
@@ -628,9 +932,23 @@ function bindEvents() {
   document.getElementById("password-form")?.addEventListener("submit", handlePasswordChange);
 
   document.getElementById("refresh-session")?.addEventListener("click", refreshSession);
+  document.getElementById("open-notifications")?.addEventListener("click", () => {
+    state.notificationsOpen = true;
+    render();
+  });
   document.getElementById("open-password")?.addEventListener("click", () => {
     state.passwordOpen = true;
     render();
+  });
+  document.getElementById("close-notifications")?.addEventListener("click", () => {
+    state.notificationsOpen = false;
+    render();
+  });
+  document.getElementById("close-notifications-overlay")?.addEventListener("click", (event) => {
+    if (event.target.id === "close-notifications-overlay") {
+      state.notificationsOpen = false;
+      render();
+    }
   });
   document.getElementById("close-password")?.addEventListener("click", () => {
     state.passwordOpen = false;
@@ -648,13 +966,37 @@ function bindEvents() {
   });
   document.getElementById("close-job-modal")?.addEventListener("click", () => {
     state.activeJobId = "";
+    closeJobRoute();
     render();
   });
   document.getElementById("close-job-modal-overlay")?.addEventListener("click", (event) => {
     if (event.target.id === "close-job-modal-overlay") {
       state.activeJobId = "";
+      closeJobRoute();
       render();
     }
+  });
+  document.getElementById("close-job-detail")?.addEventListener("click", () => {
+    state.activeJobId = "";
+    closeJobRoute();
+    render();
+  });
+
+  document.getElementById("job-search")?.addEventListener("input", (event) => {
+    state.jobQuery = event.target.value;
+    render();
+  });
+  document.getElementById("job-source-filter")?.addEventListener("change", (event) => {
+    state.jobSourceFilter = event.target.value;
+    render();
+  });
+  document.getElementById("job-type-filter")?.addEventListener("change", (event) => {
+    state.jobTypeFilter = event.target.value;
+    render();
+  });
+  document.getElementById("job-sort")?.addEventListener("change", (event) => {
+    state.jobSort = event.target.value;
+    render();
   });
 
   document.querySelectorAll("[data-verify-candidate]").forEach((button) => {
@@ -673,11 +1015,31 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-update-stage]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        const session = await request("/api/admin/applications/status", {
+          method: "POST",
+          body: JSON.stringify({
+            jobId: button.dataset.jobId,
+            candidateId: button.dataset.candidateId,
+            status: button.dataset.updateStage,
+          }),
+        });
+        saveSession(session);
+        setMessage(`Applicant updated to ${button.dataset.updateStage}.`);
+        render();
+      } catch (error) {
+        setMessage(error.message, "error");
+      }
+    });
+  });
+
   document.querySelectorAll("[data-open-job]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      state.activeJobId = button.dataset.openJob;
+      openJobRoute(button.dataset.openJob);
       render();
     });
   });
@@ -689,5 +1051,9 @@ function bindEvents() {
     });
   });
 }
+
+window.addEventListener("popstate", () => {
+  render();
+});
 
 refreshSession();

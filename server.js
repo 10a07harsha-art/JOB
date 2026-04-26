@@ -4,12 +4,14 @@ const path = require("path");
 const crypto = require("crypto");
 const { URL } = require("url");
 
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 8000);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const STORE_PATH = path.join(__dirname, "data", "store.json");
 const TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
 const DEFAULT_JOBS_URL = "https://remotive.com/api/remote-jobs?limit=24";
+const DEFAULT_JOBICY_URL = "https://jobicy.com/api/v2/remote-jobs?count=24";
+const DEFAULT_ARBEITNOW_URL = "https://www.arbeitnow.com/api/job-board-api";
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -92,17 +94,26 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   };
 }
 
+function safeTimingEqual(left, right, encoding = "utf8") {
+  const leftBuffer = Buffer.isBuffer(left) ? left : Buffer.from(left, encoding);
+  const rightBuffer = Buffer.isBuffer(right) ? right : Buffer.from(right, encoding);
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 function verifyPassword(password, user) {
   if (!user) {
     return false;
   }
 
   if (!user.passwordSalt || !user.passwordHash) {
-    return Boolean(user.password) && crypto.timingSafeEqual(Buffer.from(String(password)), Buffer.from(String(user.password)));
+    return Boolean(user.password) && safeTimingEqual(String(password), String(user.password));
   }
 
   const candidate = crypto.scryptSync(password, user.passwordSalt, 64).toString("hex");
-  return crypto.timingSafeEqual(Buffer.from(candidate, "hex"), Buffer.from(user.passwordHash, "hex"));
+  return safeTimingEqual(Buffer.from(candidate, "hex"), Buffer.from(user.passwordHash, "hex"));
 }
 
 function base64url(value) {
@@ -124,7 +135,7 @@ function parseToken(token, secret) {
 
   const [header, body, signature] = parts;
   const expected = crypto.createHmac("sha256", secret).update(`${header}.${body}`).digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+  if (!safeTimingEqual(signature, expected)) {
     return null;
   }
 
@@ -170,6 +181,57 @@ function sanitizeUser(user) {
   return safeUser;
 }
 
+function ensureNotificationStore(user) {
+  if (!user.notifications) {
+    user.notifications = [];
+  }
+  return user.notifications;
+}
+
+function pushNotification(user, notification) {
+  if (!user) {
+    return;
+  }
+
+  const notifications = ensureNotificationStore(user);
+  notifications.unshift({
+    id: createId("note"),
+    createdAt: new Date().toISOString(),
+    read: false,
+    ...notification,
+  });
+  notifications.splice(50);
+}
+
+function applicationStageLabel(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "reviewed":
+      return "Reviewed";
+    case "shortlisted":
+      return "Shortlisted";
+    case "interview":
+      return "Interview";
+    case "offer":
+      return "Offer";
+    case "rejected":
+      return "Rejected";
+    default:
+      return "Applied";
+  }
+}
+
+function normalizeApplicationStatus(status) {
+  const value = String(status || "").trim().toLowerCase();
+  if (["applied", "reviewed", "shortlisted", "interview", "offer", "rejected"].includes(value)) {
+    return value;
+  }
+  return "reviewed";
+}
+
+function getApplicationStatus(job, userId) {
+  return job?.applicants?.find((applicant) => applicant.userId === userId)?.status || "Applied";
+}
+
 function initials(name) {
   return String(name || "")
     .split(" ")
@@ -207,11 +269,13 @@ function normalizeRemoteJobs(payload) {
   return list.map((job, index) => ({
     id: job.id || `remote_job_${index}`,
     source: "global",
+    provider: "remotive",
+    providerLabel: "Remotive",
     title: job.title || job.position || "Untitled role",
     company: job.company || job.company_name || "External company",
     location: job.location || job.region || "Remote",
     country: job.country || job.region || "Global",
-    type: job.type || job.job_type || "Full-time",
+    type: normalizeJobType(job.type || job.job_type || "Full-time"),
     salary: job.salary || job.compensation || "Salary not listed",
     category: job.category || "General",
     applyUrl: job.url || job.apply_url || "",
@@ -221,6 +285,104 @@ function normalizeRemoteJobs(payload) {
     createdAt: job.createdAt || job.created_at || new Date().toISOString(),
     applicants: [],
   }));
+}
+
+function normalizeJobicyJobs(payload) {
+  const list = Array.isArray(payload) ? payload : payload.jobs || payload.data || [];
+  return list.map((job, index) => ({
+    id: job.id || `jobicy_job_${index}`,
+    source: "global",
+    provider: "jobicy",
+    providerLabel: "Jobicy",
+    title: job.jobTitle || job.title || "Untitled role",
+    company: job.companyName || job.company || "External company",
+    location: job.jobGeo || job.location || "Remote",
+    country: job.jobGeo || job.country || "Global",
+    type: normalizeJobType(job.jobType || job.type || "Full-time"),
+    salary: job.salary || job.compensation || "Salary not listed",
+    category: job.jobIndustry || job.category || "General",
+    applyUrl: job.url || job.apply_url || "",
+    skills: Array.isArray(job.skills)
+      ? job.skills
+      : String(job.tags || job.jobTags || job.jobIndustry || "").split(",").map((item) => item.trim()).filter(Boolean),
+    description: job.jobDescription || job.jobExcerpt || job.description || "External role imported from provider.",
+    postedBy: null,
+    createdAt: job.createdAt || job.publishedAt || job.created_at || new Date().toISOString(),
+    applicants: [],
+  }));
+}
+
+function normalizeArbeitnowJobs(payload) {
+  const list = Array.isArray(payload) ? payload : payload.data || payload.jobs || [];
+  return list
+    .filter((job) => job.remote !== false)
+    .map((job, index) => ({
+      id: job.slug || job.id || `arbeitnow_job_${index}`,
+      source: "global",
+      provider: "arbeitnow",
+      providerLabel: "Arbeitnow",
+      title: job.title || job.job_title || "Untitled role",
+      company: job.company_name || job.company || "External company",
+      location: job.location || job.city || job.region || job.country || "Europe",
+      country: job.country || job.region || "Global",
+      type: normalizeJobType(job.job_types?.[0] || job.jobType || job.type || "Full-time"),
+      salary: job.salary || job.compensation || "Salary not listed",
+      category: job.tags?.[0] || job.category || "General",
+      applyUrl: job.url || job.job_url || job.apply_url || "",
+      skills: Array.isArray(job.tags) ? job.tags : String(job.tags || job.skills || "").split(",").map((item) => item.trim()).filter(Boolean),
+      description: job.description || job.job_description || job.body || "External role imported from provider.",
+      postedBy: null,
+      createdAt: job.created_at || job.date || new Date().toISOString(),
+      applicants: [],
+    }));
+}
+
+function normalizeJobType(value) {
+  const text = String(value || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
+  if (!text) {
+    return "Full-Time";
+  }
+  if (text === "full_time" || text === "full-time" || text === "fulltime") {
+    return "Full-Time";
+  }
+  if (text === "part_time" || text === "part-time" || text === "parttime") {
+    return "Part-Time";
+  }
+  return text
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("-");
+}
+
+function normalizeJobFingerprint(job) {
+  return [
+    String(job.title || "").trim().toLowerCase(),
+    String(job.company || "").trim().toLowerCase(),
+    String(job.location || "").trim().toLowerCase(),
+    String(job.type || "").trim().toLowerCase(),
+    String(job.applyUrl || "").trim().toLowerCase(),
+  ].join("|");
+}
+
+function dedupeJobs(jobs) {
+  const seen = new Set();
+  return jobs.filter((job) => {
+    const fingerprint = normalizeJobFingerprint(job);
+    if (seen.has(fingerprint)) {
+      return false;
+    }
+    seen.add(fingerprint);
+    return true;
+  });
+}
+
+async function fetchJobSource(url, apiKey, normalizer) {
+  const payload = await fetchJsonWithFallback(url, apiKey);
+  if (!payload) {
+    return [];
+  }
+
+  return normalizer(payload);
 }
 
 function normalizeRemoteTrends(payload) {
@@ -236,16 +398,76 @@ function normalizeRemoteTrends(payload) {
 }
 
 async function getGlobalJobs(store) {
+  const providers = [
+    {
+      name: "remotive",
+      url: process.env.REMOTIVE_JOBS_URL || process.env.GLOBAL_JOBS_URL || DEFAULT_JOBS_URL,
+      apiKey: process.env.REMOTIVE_JOBS_API_KEY || process.env.GLOBAL_JOBS_API_KEY,
+      normalizer: normalizeRemoteJobs,
+    },
+    {
+      name: "jobicy",
+      url: process.env.JOBICY_JOBS_URL || DEFAULT_JOBICY_URL,
+      apiKey: process.env.JOBICY_JOBS_API_KEY || "",
+      normalizer: normalizeJobicyJobs,
+    },
+    {
+      name: "arbeitnow",
+      url: process.env.ARBEITNOW_JOBS_URL || DEFAULT_ARBEITNOW_URL,
+      apiKey: process.env.ARBEITNOW_JOBS_API_KEY || "",
+      normalizer: normalizeArbeitnowJobs,
+    },
+  ];
+
   try {
-    const payload = await fetchJsonWithFallback(process.env.GLOBAL_JOBS_URL || DEFAULT_JOBS_URL, process.env.GLOBAL_JOBS_API_KEY);
-    if (payload) {
-      return normalizeRemoteJobs(payload);
+    const settled = await Promise.allSettled(
+      providers.map((provider) =>
+        fetchJobSource(provider.url, provider.apiKey, provider.normalizer).then((jobs) =>
+          jobs.map((job) => ({
+            ...job,
+            provider: job.provider || provider.name,
+            providerLabel: job.providerLabel || provider.name[0].toUpperCase() + provider.name.slice(1),
+          })),
+        ),
+      ),
+    );
+
+    const combined = dedupeJobs(settled.flatMap((result) => (result.status === "fulfilled" ? result.value : [])));
+    if (combined.length) {
+      return combined;
     }
   } catch (error) {
-    // Fallback to local jobs when remote provider is unavailable.
+    // Fallback to local jobs when remote providers are unavailable.
   }
 
   return store.jobs.filter((job) => job.source === "global");
+}
+
+function mergeGlobalJobs(store, globalJobs) {
+  const localGlobalJobs = store.jobs.filter((job) => job.source === "global");
+  const localById = new Map(localGlobalJobs.map((job) => [job.id, job]));
+  const merged = globalJobs.map((job) => {
+    const local = localById.get(job.id);
+    if (!local) {
+      return job;
+    }
+
+    return {
+      ...job,
+      applicants: local.applicants || job.applicants || [],
+      postedBy: local.postedBy ?? job.postedBy ?? null,
+      createdAt: local.createdAt || job.createdAt,
+      category: local.category || job.category,
+    };
+  });
+
+  localGlobalJobs.forEach((job) => {
+    if (!merged.some((entry) => entry.id === job.id)) {
+      merged.push(job);
+    }
+  });
+
+  return merged;
 }
 
 function deriveLiveTrendsFromJobs(jobs) {
@@ -434,6 +656,7 @@ function enrichJob(store, job, viewer) {
     postedByUser: sanitizeUser(store.users.find((entry) => entry.id === job.postedBy)),
     viewerApplied: Boolean(viewer && applicants.some((applicant) => applicant.userId === viewer.id)),
     viewerSaved: Boolean(viewer && viewer.savedJobs.includes(job.id)),
+    viewerApplicationStatus: viewer ? getApplicationStatus(job, viewer.id) : "",
   };
 }
 
@@ -446,9 +669,10 @@ function buildAuthPayload(store, user) {
 }
 
 async function buildMemberDashboard(store, user) {
-  const globalJobs = await getGlobalJobs(store);
+  const globalJobs = mergeGlobalJobs(store, await getGlobalJobs(store));
   const jobs = [...store.jobs.filter((job) => job.source === "internal"), ...globalJobs].map((job) => enrichJob(store, job, user));
   const trends = await getTrends(store);
+  const notifications = ensureNotificationStore(user);
   return {
     kind: "member",
     auth: buildAuthPayload(store, user),
@@ -462,13 +686,14 @@ async function buildMemberDashboard(store, user) {
     appliedJobs: jobs.filter((job) => user.appliedJobs.includes(job.id)),
     savedJobs: jobs.filter((job) => user.savedJobs.includes(job.id)),
     trends,
+    notifications,
     ai: buildLocalAiAdvisor(store, user, jobs, trends),
   };
 }
 
 async function buildAdminDashboard(store, user) {
   const trends = await getTrends(store);
-  const worldJobs = (await getGlobalJobs(store)).map((job) => enrichJob(store, job, user));
+  const worldJobs = mergeGlobalJobs(store, await getGlobalJobs(store)).map((job) => enrichJob(store, job, user));
   const postedJobs = store.jobs.filter((job) => job.postedBy === user.id).map((job) => enrichJob(store, job, user));
   const applicants = postedJobs.flatMap((job) =>
     job.applicants.map((applicant) => ({
@@ -493,6 +718,7 @@ async function buildAdminDashboard(store, user) {
     trends,
     resumeChecks: user.verifiedResumes,
     worldJobs,
+    notifications: ensureNotificationStore(user),
   };
 }
 
@@ -582,6 +808,7 @@ async function handleApi(req, res, parsedUrl) {
       savedJobs: [],
       postedJobs: [],
       verifiedResumes: [],
+      notifications: [],
     };
 
     store.users.push(user);
@@ -643,6 +870,7 @@ async function handleApi(req, res, parsedUrl) {
       savedJobs: [],
       postedJobs: [],
       verifiedResumes: [],
+      notifications: [],
     };
 
     store.users.push(user);
@@ -705,6 +933,7 @@ async function handleApi(req, res, parsedUrl) {
       savedJobs: [],
       postedJobs: [],
       verifiedResumes: [],
+      notifications: [],
     };
 
     store.users.push(user);
@@ -856,6 +1085,24 @@ async function handleApi(req, res, parsedUrl) {
       store.jobs.push(job);
     }
 
+    pushNotification(viewer, {
+      type: "application",
+      title: `Applied to ${job.title}`,
+      message: `Your application for ${job.company} is now ${applicationStageLabel("Applied")}.`,
+      jobId: job.id,
+    });
+
+    if (job.source === "internal") {
+      const employer = store.users.find((entry) => entry.id === job.postedBy);
+      pushNotification(employer, {
+        type: "applicant",
+        title: `New application for ${job.title}`,
+        message: `${viewer.name} applied to ${job.company}.`,
+        jobId: job.id,
+        candidateId: viewer.id,
+      });
+    }
+
     writeStore(store);
     sendJson(res, 200, await buildDashboard(store, viewer));
     return;
@@ -891,6 +1138,55 @@ async function handleApi(req, res, parsedUrl) {
       status: "Verified",
       summary: `Resume file ${candidate.resumeFileName || "manual-entry.txt"} reviewed. Strongest signals: ${candidate.skills.slice(0, 3).join(", ")}.`,
     });
+    pushNotification(candidate, {
+      type: "resume",
+      title: "Resume verified",
+      message: `${viewer.companyName || "Your company"} reviewed your resume and marked it verified.`,
+    });
+    writeStore(store);
+    sendJson(res, 200, await buildDashboard(store, viewer));
+    return;
+  }
+
+  if (req.method === "POST" && parsedUrl.pathname === "/api/admin/applications/status") {
+    if (viewer.role !== "talent_lead") {
+      sendJson(res, 403, { message: "Only ForgeHire can update application stages" });
+      return;
+    }
+
+    const body = await parseBody(req);
+    const job = store.jobs.find((entry) => entry.id === body.jobId && entry.postedBy === viewer.id);
+    if (!job) {
+      sendJson(res, 404, { message: "Job not found" });
+      return;
+    }
+
+    const applicant = job.applicants.find((entry) => entry.userId === body.candidateId);
+    if (!applicant) {
+      sendJson(res, 404, { message: "Applicant not found" });
+      return;
+    }
+
+    const nextStatus = normalizeApplicationStatus(body.status);
+    applicant.status = nextStatus;
+    applicant.updatedAt = new Date().toISOString();
+
+    const candidate = store.users.find((entry) => entry.id === body.candidateId);
+    pushNotification(candidate, {
+      type: "application",
+      title: `Application ${applicationStageLabel(nextStatus)}`,
+      message: `${viewer.companyName || "A hiring team"} updated your application for ${job.title} to ${applicationStageLabel(nextStatus)}.`,
+      jobId: job.id,
+    });
+
+    pushNotification(viewer, {
+      type: "applicant",
+      title: `Stage updated for ${job.title}`,
+      message: `${candidate?.name || "A candidate"} is now ${applicationStageLabel(nextStatus)}.`,
+      jobId: job.id,
+      candidateId: body.candidateId,
+    });
+
     writeStore(store);
     sendJson(res, 200, await buildDashboard(store, viewer));
     return;
@@ -930,11 +1226,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     const cleanPath = parsedUrl.pathname.replace(/\/+$/, "") || "/";
-    let publicPath = cleanPath === "/" ? "index.html" : cleanPath.slice(1);
-
-    if (cleanPath === "/studio") {
-      publicPath = "studio.html";
-    }
+    let publicPath = cleanPath === "/" || cleanPath === "/candidate" || cleanPath.startsWith("/job/")
+      ? "index.html"
+      : cleanPath === "/professional" || cleanPath === "/studio" || cleanPath.startsWith("/professional/")
+        ? "studio.html"
+        : cleanPath.slice(1);
 
     let filePath = path.join(PUBLIC_DIR, publicPath);
     if (!filePath.startsWith(PUBLIC_DIR)) {
@@ -954,7 +1250,8 @@ const server = http.createServer(async (req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, HOST, () => {
-    console.log(`Orbit Jobs running at http://${HOST}:${PORT}`);
+    console.log(`Orbit Jobs running at http://localhost:${PORT}`);
+    console.log(`Orbit Jobs running at http://127.0.0.1:${PORT}`);
   });
 }
 

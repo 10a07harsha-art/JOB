@@ -14,6 +14,10 @@ This project is a role-based hiring platform with two branded workspaces:
 - trend provider fallback support
 - built-in AI advisor with optional external AI provider hookup
 - applicant review and resume verification for admins
+- job search, filters, sorting, and detail routes
+- candidate and employer notifications
+- employer applicant stage controls
+- multi-source global job aggregation from Remotive, Jobicy, and Arbeitnow
 
 ## Run
 ```bash
@@ -37,9 +41,15 @@ Default key in local seed data:
 No demo accounts are shown in the UI. Only the candidate side has signup.
 
 ## Live Providers
-Orbit Jobs pulls live global jobs from Remotive by default. Copy `.env.example` to `.env` if you want to override providers or connect your own services:
+Orbit Jobs pulls live global jobs from multiple public providers by default. Copy `.env.example` to `.env` if you want to override providers or connect your own services:
 - `GLOBAL_JOBS_URL`
 - `GLOBAL_JOBS_API_KEY`
+- `REMOTIVE_JOBS_URL`
+- `REMOTIVE_JOBS_API_KEY`
+- `JOBICY_JOBS_URL`
+- `JOBICY_JOBS_API_KEY`
+- `ARBEITNOW_JOBS_URL`
+- `ARBEITNOW_JOBS_API_KEY`
 - `GLOBAL_TRENDS_URL`
 - `GLOBAL_TRENDS_API_KEY`
 - `AI_PROVIDER_URL`
