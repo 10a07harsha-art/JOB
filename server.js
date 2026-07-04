@@ -4,7 +4,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { URL } = require("url");
 
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 8000);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const STORE_PATH = path.join(__dirname, "data", "store.json");
@@ -953,8 +953,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, HOST, () => {
-    console.log(`Orbit Jobs running at http://${HOST}:${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Orbit Jobs running at port ${PORT}`);
   });
 }
 
