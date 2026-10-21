@@ -3,6 +3,7 @@ name: Publish frontend preview to GitHub Pages
 on:
   push:
     branches:
+      - main
       - codex-job-portal-update
   workflow_dispatch:
 
