@@ -3,7 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check public/app.js && node --check public/studio.js && node --check scripts/migrate-mongodb.js",
+    "migrate:mongodb": "node scripts/migrate-mongodb.js",
+    "backup:mongodb": "node scripts/backup-mongodb.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "mongodb": "^6.21.0"
   }
 }

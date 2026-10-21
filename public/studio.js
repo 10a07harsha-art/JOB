@@ -18,7 +18,7 @@ function readStoredSession() {
 
 const state = {
   session: readStoredSession(),
-  token: localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || readStoredSession()?.auth?.token || "",
+  token: "",
   message: "",
   messageType: "success",
   passwordOpen: false,
@@ -30,6 +30,8 @@ const state = {
   jobTypeFilter: "all",
   jobSort: "recent",
 };
+localStorage.removeItem(TOKEN_KEY);
+localStorage.removeItem(LEGACY_TOKEN_KEY);
 
 document.title = "ForgeHire Employer Console";
 let refreshSessionRun = 0;
@@ -38,9 +40,9 @@ async function request(path, options = {}) {
   const { headers: requestHeaders, ...requestOptions } = options;
   const response = await fetch(path, {
     ...requestOptions,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
       ...(requestHeaders || {}),
     },
   });
@@ -66,13 +68,14 @@ function setMessage(text, type = "success") {
 
 function saveSession(session) {
   state.session = session;
-  state.token = session.auth.token;
-  localStorage.setItem(TOKEN_KEY, state.token);
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  state.token = "";
+  localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 function clearSession() {
+  fetch("/api/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
   state.session = null;
   state.token = "";
   state.passwordOpen = false;
@@ -88,7 +91,7 @@ async function refreshSession() {
   const runId = ++refreshSessionRun;
   const tokenAtStart = state.token;
 
-  if (!state.token) {
+  if (!state.session) {
     render();
     return;
   }
@@ -278,6 +281,21 @@ function companyMark(name, fallback = "FH") {
   `;
 }
 
+function cloudInsightCopy(cloud = {}) {
+  return {
+    title: cloud.title || "Cloud computing",
+    summary: cloud.summary || "Cloud hiring and platform engineering roles are showing up in the live market feed.",
+    readiness: Number(cloud.readiness || 0),
+    marketCount: Number(cloud.marketCount || 0),
+    topSkills: cloud.topSkills || [],
+    cloudJobs: cloud.cloudJobs || [],
+    matchedSkills: cloud.matchedSkills || [],
+    nextFocus: cloud.nextFocus || [],
+    roadmap: cloud.roadmap || [],
+    trendTitle: cloud.trendTitle || "Cloud cost optimization",
+  };
+}
+
 function getFocusedJob(jobs) {
   if (!jobs.length) {
     return null;
@@ -341,6 +359,7 @@ function topbar() {
         ${featureChip("Jobs", state.session.features.liveJobs)}
         ${featureChip("Trends", state.session.features.liveTrends)}
         ${featureChip("AI", state.session.features.liveAi)}
+        ${featureChip("Cloud", state.session.features.cloudInsights)}
         <button class="ghost-button" id="open-notifications">Notifications ${notificationCount ? `(${notificationCount})` : ""}</button>
         <a class="ghost-link-button" href="/">Orbit Jobs</a>
         <button class="ghost-button" id="open-password">Password</button>
@@ -659,7 +678,8 @@ function getEmployerJobById(jobId) {
 }
 
 function adminDashboard() {
-  const { viewer, postedJobs, applicants, trends, worldJobs, resumeChecks } = state.session;
+  const { viewer, postedJobs, applicants, trends, worldJobs, resumeChecks, cloudInsights } = state.session;
+  const cloud = cloudInsightCopy(cloudInsights);
   const visibleWorldJobs = filterJobs(worldJobs);
   const visiblePostedJobs = filterJobs(postedJobs);
   return `
@@ -799,6 +819,30 @@ function adminDashboard() {
       <section class="panel glass reveal-up delay-6">
         <div class="panel-header">
           <div>
+            <span class="eyebrow">${cloud.title}</span>
+            <h3>Cloud hiring radar</h3>
+            <p>${cloud.marketCount} cloud-matched jobs in the live feed.</p>
+          </div>
+        </div>
+        <div class="info-grid">
+          <div><strong>${cloud.readiness}%</strong><span>Cloud readiness</span></div>
+          <div><strong>${cloud.topSkills.length ? cloud.topSkills[0].skill : "AWS"}</strong><span>Top skill</span></div>
+          <div><strong>${cloud.nextFocus.length ? cloud.nextFocus[0] : "FinOps"}</strong><span>Next focus</span></div>
+        </div>
+        <div class="mini-card-grid">
+          ${cloud.cloudJobs.length ? cloud.cloudJobs.map((job) => `
+            <article class="mini-card">
+              <strong>${job.title}</strong>
+              <span>${job.company}</span>
+              <p>${job.location} · ${job.salary}</p>
+            </article>
+          `).join("") : `<div class="empty-card">No cloud-specific jobs found in the current feed.</div>`}
+        </div>
+      </section>
+
+      <section class="panel glass reveal-up delay-6">
+        <div class="panel-header">
+          <div>
             <span class="eyebrow">Market roles</span>
             <h3>See world jobs beside your own openings</h3>
             <p>${visibleWorldJobs.length} market listings after filters.</p>
@@ -864,6 +908,25 @@ function shell() {
   `;
 }
 
+function sanitizedFragment(markup) {
+  const template = document.createElement("template");
+  template.innerHTML = markup;
+  template.content.querySelectorAll("script, iframe, object, embed, style, link, meta, base").forEach((node) => node.remove());
+  template.content.querySelectorAll("*").forEach((element) => {
+    [...element.attributes].forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value.trim().toLowerCase();
+      if (name.startsWith("on") || name === "srcdoc") {
+        element.removeAttribute(attribute.name);
+      }
+      if (["href", "src", "action", "formaction"].includes(name) && /^(javascript|vbscript|data):/.test(value)) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+  });
+  return template.content;
+}
+
 function render() {
   if (state.session?.kind === "member") {
     window.location.replace("/");
@@ -872,7 +935,7 @@ function render() {
   if (state.session?.kind === "talent_lead" && window.location.pathname === "/") {
     window.history.replaceState({}, "", "/professional");
   }
-  app.innerHTML = state.session ? shell() : authView();
+  app.replaceChildren(sanitizedFragment(state.session ? shell() : authView()));
   bindEvents();
 }
 

@@ -3,6 +3,7 @@ const TOKEN_KEY = "orbit_jobs_token";
 const SESSION_KEY = "orbit_jobs_session";
 const LEGACY_TOKEN_KEY = "careerlink_token";
 const AUTH_SCREEN_KEY = "orbit_jobs_auth_screen";
+const COLLECTION_KEY = "orbit_jobs_collection_filter";
 
 function readStoredSession() {
   try {
@@ -19,8 +20,10 @@ function readStoredSession() {
 
 const state = {
   session: readStoredSession(),
-  token: localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || readStoredSession()?.auth?.token || "",
-  authScreen: ["login", "signup"].includes(localStorage.getItem(AUTH_SCREEN_KEY)) ? localStorage.getItem(AUTH_SCREEN_KEY) : "login",
+  token: "",
+  authScreen: ["login", "signup", "reset", "verify"].includes(localStorage.getItem(AUTH_SCREEN_KEY)) ? localStorage.getItem(AUTH_SCREEN_KEY) : "login",
+  resetToken: "",
+  verificationToken: "",
   message: "",
   messageType: "success",
   aiResponse: "",
@@ -33,18 +36,21 @@ const state = {
   jobSourceFilter: "all",
   jobTypeFilter: "all",
   jobSort: "recent",
+  collectionFilter: localStorage.getItem(COLLECTION_KEY) || "all",
 };
+localStorage.removeItem(TOKEN_KEY);
+localStorage.removeItem(LEGACY_TOKEN_KEY);
 
 document.title = "Orbit Jobs Candidate Portal";
 let refreshSessionRun = 0;
 
 async function request(path, options = {}) {
-  const { headers: requestHeaders, ...requestOptions } = options;
+  const { headers: requestHeaders, skipAuth = false, ...requestOptions } = options;
   const response = await fetch(path, {
     ...requestOptions,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
       ...(requestHeaders || {}),
     },
   });
@@ -74,15 +80,21 @@ function persistAuthScreen(value) {
   localStorage.setItem(AUTH_SCREEN_KEY, value);
 }
 
+function persistCollectionFilter(value) {
+  state.collectionFilter = value;
+  localStorage.setItem(COLLECTION_KEY, value);
+}
+
 function saveSession(session) {
   state.session = session;
-  state.token = session.auth.token;
-  localStorage.setItem(TOKEN_KEY, state.token);
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  state.token = "";
+  localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 function clearSession() {
+  fetch("/api/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
   state.session = null;
   state.token = "";
   state.aiResponse = "";
@@ -91,16 +103,18 @@ function clearSession() {
   state.notificationsOpen = false;
   state.activeJobId = "";
   state.focusedJobId = "";
+  state.collectionFilter = "all";
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(LEGACY_TOKEN_KEY);
+  localStorage.removeItem(COLLECTION_KEY);
 }
 
 async function refreshSession() {
   const runId = ++refreshSessionRun;
   const tokenAtStart = state.token;
 
-  if (!state.token) {
+  if (!state.session) {
     render();
     return;
   }
@@ -260,6 +274,21 @@ function topCompaniesFromJobs(jobs, limit = 4) {
     .map(([company, count]) => ({ company, count }));
 }
 
+function cloudInsightCopy(cloud = {}) {
+  return {
+    title: cloud.title || "Cloud computing",
+    summary: cloud.summary || "Cloud hiring and platform engineering roles are showing up in the live market feed.",
+    readiness: Number(cloud.readiness || 0),
+    marketCount: Number(cloud.marketCount || 0),
+    topSkills: cloud.topSkills || [],
+    cloudJobs: cloud.cloudJobs || [],
+    matchedSkills: cloud.matchedSkills || [],
+    nextFocus: cloud.nextFocus || [],
+    roadmap: cloud.roadmap || [],
+    trendTitle: cloud.trendTitle || "Cloud cost optimization",
+  };
+}
+
 function getFocusedJob(jobs) {
   if (!jobs.length) {
     return null;
@@ -300,6 +329,7 @@ function filterJobs(jobs) {
   const query = state.jobQuery.trim().toLowerCase();
   const sourceFilter = state.jobSourceFilter;
   const typeFilter = state.jobTypeFilter;
+  const collectionFilter = state.collectionFilter;
 
   const filtered = jobs.filter((job) => {
     if (sourceFilter !== "all" && job.source !== sourceFilter) {
@@ -308,6 +338,22 @@ function filterJobs(jobs) {
 
     if (typeFilter !== "all" && normalizeJobType(job.type) !== typeFilter) {
       return false;
+    }
+
+    if (collectionFilter === "remote") {
+      const remoteText = `${job.location} ${job.country}`.toLowerCase();
+      if (!remoteText.includes("remote")) {
+        return false;
+      }
+    } else if (collectionFilter === "easy-apply") {
+      if (job.source === "global" && !job.applyUrl) {
+        return false;
+      }
+    } else if (collectionFilter === "cloud") {
+      const cloudText = `${job.title} ${job.company} ${job.description} ${(job.skills || []).join(" ")}`.toLowerCase();
+      if (!/(cloud|aws|azure|gcp|kubernetes|terraform|devops|sre|finops)/.test(cloudText)) {
+        return false;
+      }
     }
 
     if (!query) {
@@ -384,6 +430,15 @@ function formatJobType(value) {
 function authView() {
   const loginScreen = state.authScreen === "login";
   const signupScreen = state.authScreen === "signup";
+  const resetScreen = state.authScreen === "reset";
+  const verifyScreen = state.authScreen === "verify";
+  const queryParams = new URLSearchParams(window.location.search);
+  if (!state.resetToken && queryParams.get("resetToken")) {
+    state.resetToken = queryParams.get("resetToken");
+  }
+  if (!state.verificationToken && queryParams.get("verificationToken")) {
+    state.verificationToken = queryParams.get("verificationToken");
+  }
 
   return `
     <div class="auth-shell orbit-auth-shell">
@@ -413,6 +468,8 @@ function authView() {
         <div class="tab-row">
           <button type="button" class="tab-pill ${loginScreen ? "active" : ""}" data-auth-screen="login">Login</button>
           <button type="button" class="tab-pill ${signupScreen ? "active" : ""}" data-auth-screen="signup">Signup</button>
+          <button type="button" class="tab-pill ${resetScreen ? "active" : ""}" data-auth-screen="reset">Reset password</button>
+          <button type="button" class="tab-pill ${verifyScreen ? "active" : ""}" data-auth-screen="verify">Verify email</button>
         </div>
 
         ${loginScreen ? `
@@ -421,6 +478,7 @@ function authView() {
             <label class="field"><span>Email</span><input id="login-email" name="email" placeholder="name@company.com" autocomplete="username" /></label>
             <label class="field"><span>Password</span><input type="password" name="password" placeholder="Enter your password" autocomplete="current-password" /></label>
             <button class="primary-button xl" type="submit">Enter workspace</button>
+            <button class="text-button" type="button" data-auth-screen="reset">Forgot password?</button>
           </form>
         ` : ""}
 
@@ -430,6 +488,32 @@ function authView() {
             <label class="field"><span>Email</span><input name="email" type="email" placeholder="email@example.com" autocomplete="email" required /></label>
             <label class="field"><span>Password</span><input type="password" name="password" placeholder="Create a password" autocomplete="new-password" required /></label>
             <button class="primary-button xl" type="submit">Create candidate account</button>
+          </form>
+        ` : ""}
+
+        ${resetScreen ? `
+          <form id="reset-request-form" class="stack-form">
+            <p class="muted-copy">Enter your account email to request a password reset.</p>
+            <label class="field"><span>Email</span><input name="email" type="email" placeholder="email@example.com" autocomplete="email" required /></label>
+            <button class="primary-button xl" type="submit">Request reset</button>
+          </form>
+          <form id="reset-confirm-form" class="stack-form reset-confirm-form">
+            <label class="field"><span>Reset token</span><input name="token" value="${state.resetToken}" placeholder="Paste your reset token" autocomplete="one-time-code" required /></label>
+            <label class="field"><span>New password</span><input type="password" name="newPassword" placeholder="Create a new password" autocomplete="new-password" required /></label>
+            <label class="field"><span>Confirm password</span><input type="password" name="confirmPassword" placeholder="Repeat your new password" autocomplete="new-password" required /></label>
+            <button class="primary-button xl" type="submit">Set new password</button>
+          </form>
+        ` : ""}
+
+        ${verifyScreen ? `
+          <form id="verification-request-form" class="stack-form">
+            <p class="muted-copy">Request a fresh verification link for your account.</p>
+            <label class="field"><span>Email</span><input name="email" type="email" placeholder="email@example.com" autocomplete="email" required /></label>
+            <button class="ghost-button" type="submit">Resend verification</button>
+          </form>
+          <form id="verification-confirm-form" class="stack-form reset-confirm-form">
+            <label class="field"><span>Verification token</span><input name="token" value="${state.verificationToken}" placeholder="Paste your verification token" autocomplete="one-time-code" required /></label>
+            <button class="primary-button xl" type="submit">Verify email</button>
           </form>
         ` : ""}
 
@@ -500,6 +584,7 @@ function topbar() {
         ${featureChip("Jobs", state.session.features.liveJobs)}
         ${featureChip("Trends", state.session.features.liveTrends)}
         ${featureChip("AI", state.session.features.liveAi)}
+        ${featureChip("Cloud", state.session.features.cloudInsights)}
         <button class="ghost-button" id="open-notifications">Notifications ${notificationCount ? `(${notificationCount})` : ""}</button>
         ${state.session.kind === "member" ? `<button class="ghost-button" id="open-profile">Profile</button>` : ""}
         <button class="ghost-button" id="open-password">Password</button>
@@ -702,12 +787,13 @@ function candidateSidebar(viewer, appliedJobs, savedJobs, ai, jobs) {
   `;
 }
 
-function candidateRightRail(trends, notifications, ai, savedJobs, jobs) {
+function candidateRightRail(trends, notifications, ai, savedJobs, jobs, cloudInsights) {
   const topSkills = topSkillsFromJobs(jobs || [], 5);
   const topLocations = topLocationsFromJobs(jobs || [], 4);
   const topCompanies = topCompaniesFromJobs(jobs || [], 4);
   const quickTargets = (jobs || []).slice(0, 3);
   const moreTargets = (jobs || []).slice(3, 8);
+  const cloud = cloudInsightCopy(cloudInsights);
   return `
     <aside class="linkedin-sidebar right">
       <section class="linkedin-card glass rail-card" id="trends">
@@ -746,6 +832,21 @@ function candidateRightRail(trends, notifications, ai, savedJobs, jobs) {
           <button class="primary-button" type="submit">Get AI guidance</button>
         </form>
         ${state.aiResponse ? `<div class="ai-answer rail-ai-answer">${state.aiResponse}</div>` : ""}
+      </section>
+
+      <section class="linkedin-card glass rail-card">
+        <span class="eyebrow">${cloud.title}</span>
+        <div class="rail-item">
+          <strong>${cloud.readiness}% ready</strong>
+          <p>${cloud.summary}</p>
+        </div>
+        <div class="rail-pill-grid">
+          ${cloud.topSkills.length ? cloud.topSkills.map((entry) => `<span class="rail-pill">${entry.skill}</span>`).join("") : `<span class="rail-pill">Cloud skills</span>`}
+        </div>
+        <div class="rail-item">
+          <strong>Focus next</strong>
+          <p>${cloud.nextFocus.length ? cloud.nextFocus.join(" · ") : "Infrastructure as code · Containers · FinOps"}</p>
+        </div>
       </section>
 
       <section class="linkedin-card glass rail-card">
@@ -1100,7 +1201,8 @@ function getCandidateJobById(jobId) {
 }
 
 function memberDashboard() {
-  const { viewer, jobs, appliedJobs, savedJobs, trends, ai, features } = state.session;
+  const { viewer, jobs, appliedJobs, savedJobs, trends, ai, cloudInsights } = state.session;
+  const cloud = cloudInsightCopy(cloudInsights);
   const visibleJobs = filterJobs(jobs);
   const visibleAppliedJobs = filterJobs(appliedJobs);
   const visibleSavedJobs = filterJobs(savedJobs);
@@ -1109,15 +1211,11 @@ function memberDashboard() {
   const topCompanies = topCompaniesFromJobs(visibleJobs, 4);
   const featuredJobs = visibleJobs.slice(0, 3);
   const collections = [
-    "Government",
-    "Easy Apply",
-    "Remote",
-    "Hybrid",
+    { label: "All roles", value: "all" },
+    { label: "Remote", value: "remote" },
+    { label: "Easy Apply", value: "easy-apply" },
+    { label: "Cloud", value: "cloud" },
   ];
-  const dynamicCollections = [...new Set([
-    ...collections,
-    ...jobs.map((job) => formatJobType(job.type)).filter(Boolean),
-  ])].slice(0, 6);
   return `
     <div class="linkedin-layout">
       ${candidateSidebar(viewer, appliedJobs, savedJobs, ai, jobs)}
@@ -1154,7 +1252,15 @@ function memberDashboard() {
             <span>Curated from your profile and search history</span>
           </div>
           <div class="collection-tabs">
-            ${dynamicCollections.map((label, index) => `<span class="collection-pill ${index === 0 ? "active" : ""}">${label}</span>`).join("")}
+            ${collections.map((collection) => `
+              <button
+                type="button"
+                class="collection-pill ${state.collectionFilter === collection.value ? "active" : ""}"
+                data-collection="${collection.value}"
+              >
+                ${collection.label}
+              </button>
+            `).join("")}
           </div>
         </section>
 
@@ -1192,6 +1298,48 @@ function memberDashboard() {
               `).join("") : `<p>No employer data yet.</p>`}
             </article>
           </div>
+        </section>
+
+        <section class="linkedin-card glass feed-section">
+          <div class="feed-section-head">
+            <div>
+              <span class="eyebrow">${cloud.title}</span>
+              <h2>Cloud computing roles in your feed</h2>
+            </div>
+            <span>${cloud.marketCount} cloud-matched jobs</span>
+          </div>
+          <div class="insight-grid">
+            <article class="mini-card insight-card">
+              <span class="eyebrow">Cloud readiness</span>
+              <h3>${cloud.readiness}%</h3>
+              <p>${cloud.summary}</p>
+            </article>
+            <article class="mini-card insight-card">
+              <span class="eyebrow">Top cloud skills</span>
+              <div class="rail-pill-grid">
+                ${cloud.topSkills.length ? cloud.topSkills.map((entry) => `<span class="rail-pill">${entry.skill}</span>`).join("") : `<span class="rail-pill">AWS</span><span class="rail-pill">Terraform</span>`}
+              </div>
+            </article>
+            <article class="mini-card insight-card">
+              <span class="eyebrow">Next focus</span>
+              <p>${cloud.nextFocus.length ? cloud.nextFocus.join(" · ") : "Containers · IaC · Platform reliability"}</p>
+            </article>
+          </div>
+          ${cloud.cloudJobs.length ? `
+            <div class="featured-job-grid">
+              ${cloud.cloudJobs.map((job) => `
+                <article class="mini-card featured-job-card">
+                  <div class="job-list-top">
+                    <span class="source-badge global">Cloud</span>
+                    <span class="salary-pill">${job.salary}</span>
+                  </div>
+                  <h4>${job.title}</h4>
+                  <p>${job.company} · ${job.location}</p>
+                  <small>${formatJobType(job.type)}</small>
+                </article>
+              `).join("")}
+            </div>
+          ` : ""}
         </section>
 
         <section class="linkedin-card glass feed-section feed-focus">
@@ -1267,7 +1415,7 @@ function memberDashboard() {
         </section>
       </main>
 
-      ${candidateRightRail(trends, state.session.notifications || [], ai, savedJobs, jobs)}
+      ${candidateRightRail(trends, state.session.notifications || [], ai, savedJobs, jobs, cloudInsights)}
     </div>
   `;
 }
@@ -1502,12 +1650,31 @@ function shell() {
   `;
 }
 
+function sanitizedFragment(markup) {
+  const template = document.createElement("template");
+  template.innerHTML = markup;
+  template.content.querySelectorAll("script, iframe, object, embed, style, link, meta, base").forEach((node) => node.remove());
+  template.content.querySelectorAll("*").forEach((element) => {
+    [...element.attributes].forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value.trim().toLowerCase();
+      if (name.startsWith("on") || name === "srcdoc") {
+        element.removeAttribute(attribute.name);
+      }
+      if (["href", "src", "action", "formaction"].includes(name) && /^(javascript|vbscript|data):/.test(value)) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+  });
+  return template.content;
+}
+
 function render() {
   if (state.session?.kind === "talent_lead") {
     window.location.replace("/professional");
     return;
   }
-  app.innerHTML = state.session ? shell() : authView();
+  app.replaceChildren(sanitizedFragment(state.session ? shell() : authView()));
   bindEvents();
 }
 
@@ -1531,17 +1698,87 @@ async function handleSignup(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   try {
-    await request("/api/register", {
+    const response = await request("/api/register", {
       method: "POST",
+      skipAuth: true,
       body: JSON.stringify(Object.fromEntries(formData.entries())),
     });
     clearSession();
-    persistAuthScreen("login");
-    setMessage("Signed up successfully. Please log in.");
+    state.verificationToken = response.verificationToken || "";
+    persistAuthScreen("verify");
+    setMessage(response.verificationToken ? `Development verification token: ${response.verificationToken}` : "Check your email to verify your account.");
     render();
     window.setTimeout(() => {
       document.getElementById("login-email")?.focus();
     }, 0);
+  } catch (error) {
+    setMessage(error.message, "error");
+  }
+}
+
+async function handleVerificationRequest(event) {
+  event.preventDefault();
+  try {
+    const response = await request("/api/email-verification/request", {
+      method: "POST",
+      skipAuth: true,
+      body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget).entries())),
+    });
+    state.verificationToken = response.verificationToken || "";
+    setMessage(response.verificationToken ? `Development verification token: ${response.verificationToken}` : response.message);
+    render();
+  } catch (error) {
+    setMessage(error.message, "error");
+  }
+}
+
+async function handleVerificationConfirm(event) {
+  event.preventDefault();
+  try {
+    const response = await request("/api/email-verification/confirm", {
+      method: "POST",
+      skipAuth: true,
+      body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget).entries())),
+    });
+    state.verificationToken = "";
+    persistAuthScreen("login");
+    setMessage(response.message);
+    render();
+  } catch (error) {
+    setMessage(error.message, "error");
+  }
+}
+
+async function handlePasswordResetRequest(event) {
+  event.preventDefault();
+  const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+  try {
+    const response = await request("/api/password-reset/request", {
+      method: "POST",
+      skipAuth: true,
+      body: JSON.stringify(body),
+    });
+    state.resetToken = response.resetToken || "";
+    setMessage(response.resetToken ? `Development reset token: ${response.resetToken}` : response.message);
+    render();
+  } catch (error) {
+    setMessage(error.message, "error");
+  }
+}
+
+async function handlePasswordResetConfirm(event) {
+  event.preventDefault();
+  const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+  try {
+    const response = await request("/api/password-reset/confirm", {
+      method: "POST",
+      skipAuth: true,
+      body: JSON.stringify(body),
+    });
+    state.resetToken = "";
+    persistAuthScreen("login");
+    setMessage(response.message);
+    render();
   } catch (error) {
     setMessage(error.message, "error");
   }
@@ -1644,8 +1881,19 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-collection]").forEach((button) => {
+    button.addEventListener("click", () => {
+      persistCollectionFilter(button.dataset.collection);
+      render();
+    });
+  });
+
   document.getElementById("login-form")?.addEventListener("submit", handleLogin);
   document.getElementById("signup-form")?.addEventListener("submit", handleSignup);
+  document.getElementById("reset-request-form")?.addEventListener("submit", handlePasswordResetRequest);
+  document.getElementById("reset-confirm-form")?.addEventListener("submit", handlePasswordResetConfirm);
+  document.getElementById("verification-request-form")?.addEventListener("submit", handleVerificationRequest);
+  document.getElementById("verification-confirm-form")?.addEventListener("submit", handleVerificationConfirm);
   document.getElementById("profile-form")?.addEventListener("submit", handleProfileSave);
   document.getElementById("password-form")?.addEventListener("submit", handlePasswordChange);
   document.getElementById("job-form")?.addEventListener("submit", handleJobPost);

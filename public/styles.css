@@ -745,12 +745,20 @@ li {
   color: #4b5969;
   font-weight: 800;
   cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .collection-pill.active {
   background: rgba(10, 102, 194, 0.1);
   color: #0a66c2;
   border-color: rgba(10, 102, 194, 0.16);
+}
+
+.collection-pill:hover,
+.collection-pill:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(10, 102, 194, 0.24);
+  box-shadow: 0 12px 26px rgba(22, 39, 72, 0.08);
 }
 
 .feed-section-head {
@@ -1086,6 +1094,22 @@ li {
   color: var(--text);
   cursor: pointer;
   font-weight: 700;
+}
+
+.text-button {
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--blue);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.text-button:hover {
+  text-decoration: underline;
 }
 
 .tab-pill.active,
@@ -1566,10 +1590,15 @@ textarea {
 .applicant-card:hover,
 .mini-card:hover,
 .recommendation-card:hover,
-.degree-card:hover {
+.degree-card:hover,
+.linkedin-card:hover {
   transform: translateY(-4px);
   border-color: rgba(101, 228, 255, 0.18);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
+}
+
+.linkedin-card:hover {
+  transform: translateY(-2px);
 }
 
 .compact-wrap,

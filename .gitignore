@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.DS_Store
+*.log
+
+# Local runtime data; keep an example/template in source control instead.
+data/store.json
+backups/

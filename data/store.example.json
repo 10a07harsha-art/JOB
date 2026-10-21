@@ -1,0 +1,11 @@
+{
+  "meta": {
+    "developerProvisionKey": "configure-ADMIN_PROVISION_KEY",
+    "tokenSecret": "configure-TOKEN_SECRET",
+    "revokedSessions": []
+  },
+  "users": [],
+  "jobs": [],
+  "trends": [],
+  "degrees": []
+}
