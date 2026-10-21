@@ -54,6 +54,8 @@ test("registration, verification, login, session access, and logout work end to 
   });
   assert.equal(registered.response.status, 201);
   assert.match(registered.body.verificationToken, /^[a-f0-9]{64}$/);
+  assert.equal(Object.hasOwn(registered.body.viewer, "verificationTokenHash"), false);
+  assert.equal(Object.hasOwn(registered.body.viewer, "verificationTokenExpiresAt"), false);
   const initialCookie = sessionCookie(registered.response);
 
   const verified = await request("/api/email-verification/confirm", {
