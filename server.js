@@ -564,7 +564,16 @@ function sanitizeUser(user) {
     return null;
   }
 
-  const { passwordHash, passwordSalt, password, ...safeUser } = user;
+  const {
+    passwordHash,
+    passwordSalt,
+    password,
+    verificationTokenHash,
+    verificationTokenExpiresAt,
+    resetTokenHash,
+    resetTokenExpiresAt,
+    ...safeUser
+  } = user;
   return safeUser;
 }
 
