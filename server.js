@@ -441,7 +441,8 @@ async function sendPasswordResetEmail(user, resetToken) {
   });
 
   if (!response.ok) {
-    throw new Error(`Email provider error: ${response.status}`);
+    const providerMessage = (await response.text()).slice(0, 240).replace(/\s+/g, " ");
+    throw new Error(`Email provider error: ${response.status}${providerMessage ? ` - ${providerMessage}` : ""}`);
   }
   return true;
 }
@@ -467,9 +468,20 @@ async function sendVerificationEmail(user, verificationToken) {
     signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) {
-    throw new Error(`Email provider error: ${response.status}`);
+    const providerMessage = (await response.text()).slice(0, 240).replace(/\s+/g, " ");
+    throw new Error(`Email provider error: ${response.status}${providerMessage ? ` - ${providerMessage}` : ""}`);
   }
   return true;
+}
+
+function logEmailDeliveryFailure(type, error) {
+  console.error(JSON.stringify({
+    event: "email_delivery_failed",
+    type,
+    providerConfigured: Boolean(process.env.EMAIL_PROVIDER_URL && process.env.EMAIL_API_KEY),
+    senderConfigured: Boolean(process.env.EMAIL_FROM),
+    error: error instanceof Error ? error.message : String(error),
+  }));
 }
 
 function safeTimingEqual(left, right, encoding = "utf8") {
@@ -1365,7 +1377,15 @@ async function handleApi(req, res, parsedUrl) {
   if (req.method === "GET" && parsedUrl.pathname === "/api/ready") {
     try {
       await readStore();
-      sendJson(res, 200, { ok: true, service: "orbit-jobs", storage: mongoFallbackToLocal ? "local-fallback" : hasMongoStore() ? `mongodb:${MONGODB_STORAGE_MODE}` : "local" });
+      sendJson(res, 200, {
+        ok: true,
+        service: "orbit-jobs",
+        storage: mongoFallbackToLocal ? "local-fallback" : hasMongoStore() ? `mongodb:${MONGODB_STORAGE_MODE}` : "local",
+        email: {
+          configured: Boolean(process.env.EMAIL_PROVIDER_URL && process.env.EMAIL_API_KEY),
+          senderConfigured: Boolean(process.env.EMAIL_FROM),
+        },
+      });
     } catch (error) {
       sendJson(res, 503, { ok: false, message: "Storage is not ready" });
     }
@@ -1465,6 +1485,7 @@ async function handleApi(req, res, parsedUrl) {
         await sendVerificationEmail(user, verificationToken);
       } catch (error) {
         // Keep account existence and provider failures private.
+        logEmailDeliveryFailure("verification_request", error);
       }
       if (process.env.NODE_ENV !== "production") {
         response.verificationToken = verificationToken;
@@ -1590,6 +1611,7 @@ async function handleApi(req, res, parsedUrl) {
       await sendVerificationEmail(user, verificationToken);
     } catch (error) {
       // Account creation must not reveal email-provider details.
+      logEmailDeliveryFailure("verification_signup", error);
     }
     await sendDashboardWithSession(
       res,
